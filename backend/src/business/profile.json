@@ -1,0 +1,54 @@
+{
+  "title": "曜尺仪器·日晷影线校订",
+  "subtitle": "为展教日晷的转台影线投影生成放样和返校清单。",
+  "team": "曜尺仪器展教装调组 · 6 人，维护馆内日晷演示台",
+  "workflow": "装调员用可转动投影灯和转台走完一整天的模拟时间，再把测角仪的逐点读数录进电子表格，人工校订展台用的影线路径。",
+  "pain_points": [
+    "模拟时刻在 23:59 与 00:00 相邻，从分钟数直接拟合会跳变。",
+    "测角仪回到正北时从 359° 跳到 0°，普通角度相减会把微小修正当成一圈。",
+    "返校与直接放样的点混排，装调员容易把尚待复测的影线画上新底板。"
+  ],
+  "upstream": "读取固定夹具编号下的转台角度、干涉仪参考角与灯臂俯仰测点。CSV 以各轮试样独立编号。",
+  "downstream": "获取跨正北的影线和超限点，交给展教装调组分批返校及放样。",
+  "labels": {"datasets":"转台测角批","runs":"周期校订单","results":"影线修正量","handoff":"放样交接","input":"转台测角 CSV","action":"影线校订"},
+  "algorithm": "三角周期编码与双基准岭回归",
+  "method": "以 sin(2πm/1440)、cos(2πm/1440) 编码模拟分钟；同时以正弦和余弦编码转台方位角，并拼接灯臂俯仰。以参考角至刻度角的最短有符号差为目标，训练集拟合标准化及固定正则系数的岭回归。独立留出报告原始分钟/角度基线及周期模型的修正量 MAE。修正角归一至 [0,360)，跨正北两侧保持连续。",
+  "seed_name": "曜尺_三舱影线转台校订_2026-11-25.csv",
+  "scenario": [
+    "08:25 装调员导出曜尺_三舱影线转台校订_2026-11-25.csv。",
+    "08:40 分析员核对 120 个标定点、48 个留出点与 6 个待放样点。",
+    "09:00 输入 2.5° 返校阈值，提交周期校订单。",
+    "09:05 核对留出误差及 23:59、00:01 两点的修正量。",
+    "09:15 检查 YC-P01 经过正北、YC-P03 须返校，下载影线路径清单。",
+    "09:28 复核员签发可放样点，装调组按签发记录划线。"
+  ],
+  "columns": [
+    {"key":"sample_id","label":"影线测点","type":"text"},
+    {"key":"split","label":"测次","type":"text","choices":["标定","留出","待放样"]},
+    {"key":"minute","label":"模拟分钟","type":"number","min":0,"max":1439},
+    {"key":"azimuth_deg","label":"转台刻度角（°）","type":"number","min":0,"max":360},
+    {"key":"pitch_deg","label":"灯臂俯仰（°）","type":"number","min":-8,"max":8},
+    {"key":"reference_deg","label":"参考方位角（°）","type":"number","min":0,"max":360,"optional":true}
+  ],
+  "parameter": {"key":"retape_deg","label":"返校阈值（°）","default":2.5,"min":0.2,"max":10,"step":0.1,"description":"绝对修正量达到阈值的影线进入返校，其余先按修正角放样。"},
+  "result_columns": [
+    {"key":"sample_id","label":"影线测点"},
+    {"key":"clock","label":"模拟时刻"},
+    {"key":"original_deg","label":"转台刻度角（°）"},
+    {"key":"corrected_deg","label":"影线方位角（°）"},
+    {"key":"correction_deg","label":"最短修正量（°）"},
+    {"key":"crosses_north","label":"跨正北"},
+    {"key":"decision","label":"放样动作"}
+  ],
+  "chart": {"key":"correction_deg","label":"最短影线修正量（°）"},
+  "verification": {
+    "path":"/api/domain/shadow-stencil/{run_id}",
+    "assertions":[
+      {"sample_id":"YC-P01","key":"decision","value":"按角放样"},
+      {"sample_id":"YC-P01","key":"crosses_north","value":true},
+      {"sample_id":"YC-P01","key":"corrected_deg","min":0.4,"max":1.8},
+      {"sample_id":"YC-P02","key":"corrected_deg","min":0.4,"max":1.8},
+      {"sample_id":"YC-P03","key":"decision","value":"转台返校"}
+    ]
+  }
+}
